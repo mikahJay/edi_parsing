@@ -1,0 +1,20 @@
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "edi-parsing"
+version = "0.1.0"
+description = "Parse EDI 835/837 files using pyx12 and emit Snowflake-ready output"
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = [
+  "pyx12>=2.3.3",
+]
+
+[project.scripts]
+edi-parse = "edi_parsing.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["edi_parsing*"]
