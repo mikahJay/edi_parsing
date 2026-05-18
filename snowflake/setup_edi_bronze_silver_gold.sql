@@ -215,7 +215,15 @@ CREATE STREAM IF NOT EXISTS str_raw_edi_metadata
   ON TABLE raw_edi_metadata
   APPEND_ONLY = TRUE;
 
-CREATE STREAM IF NOT EXISTS str_edi_segments
+CREATE STREAM IF NOT EXISTS str_edi_segments_elements
+  ON TABLE edi_segments
+  APPEND_ONLY = TRUE;
+
+CREATE STREAM IF NOT EXISTS str_edi_segments_segment_counts
+  ON TABLE edi_segments
+  APPEND_ONLY = TRUE;
+
+CREATE STREAM IF NOT EXISTS str_edi_segments_transaction_counts
   ON TABLE edi_segments
   APPEND_ONLY = TRUE;
 
@@ -277,9 +285,8 @@ SELECT
   s.segment_id,
   f.index::NUMBER AS element_position,
   f.value::STRING AS element_value
-FROM edi_segments AS s,
-LATERAL FLATTEN(input => s.segment_elements) AS f
-WHERE s.ingested_at >= DATEADD('minute', -10, CURRENT_TIMESTAMP());
+FROM str_edi_segments_elements AS s,
+LATERAL FLATTEN(input => s.segment_elements) AS f;
 
 CREATE TASK IF NOT EXISTS task_raw_to_silver_metadata
   WAREHOUSE = <WAREHOUSE_NAME>
@@ -350,7 +357,7 @@ USING (
     transaction_set,
     segment_id,
     COUNT(*) AS segment_count
-  FROM str_edi_segments
+  FROM str_edi_segments_segment_counts
   GROUP BY 1, 2, 3, 4
 ) s
 ON t.metric_date = s.metric_date
@@ -393,7 +400,7 @@ USING (
       interchange_control_number,
       transaction_set,
       transaction_control_number
-    FROM str_edi_segments
+    FROM str_edi_segments_transaction_counts
     WHERE transaction_set IN ('835', '837')
       AND transaction_control_number IS NOT NULL
   )

@@ -57,7 +57,7 @@ python -m edi_parsing.cli ./test_data --glob "*.edi" --output parsed_records.jso
 
 Use the setup script at:
 
-- `/home/runner/work/edi_parsing/edi_parsing/snowflake/setup_edi_bronze_silver_gold.sql`
+- `snowflake/setup_edi_bronze_silver_gold.sql`
 
 What it creates:
 
@@ -79,5 +79,5 @@ Before running in Snowflake, replace placeholders in the SQL file:
 Run from Snowsight or SnowSQL:
 
 ```sql
-!source /home/runner/work/edi_parsing/edi_parsing/snowflake/setup_edi_bronze_silver_gold.sql
+!source snowflake/setup_edi_bronze_silver_gold.sql
 ```
