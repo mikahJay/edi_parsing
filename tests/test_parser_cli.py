@@ -1,4 +1,5 @@
 import json
+import shutil
 import unittest
 from pathlib import Path
 from tempfile import TemporaryDirectory
@@ -6,42 +7,22 @@ from tempfile import TemporaryDirectory
 from edi_parsing.cli import main
 from edi_parsing.parser import process_edi_batch
 
-SAMPLE_837 = (
-    "ISA*00*          *00*          *ZZ*SENDERID       *ZZ*RECEIVERID     *240101*1253*^*00501*000000905*0*T*:~"
-    "GS*HC*SENDER*RECEIVER*20240101*1253*1*X*005010X222A1~"
-    "ST*837*0001~"
-    "BHT*0019*00*0123*20240101*1319*CH~"
-    "SE*3*0001~"
-    "GE*1*1~"
-    "IEA*1*000000905~"
-)
-
-SAMPLE_835 = (
-    "ISA*00*          *00*          *ZZ*SENDERID       *ZZ*RECEIVERID     *240102*0900*^*00501*000000906*0*T*:~"
-    "GS*HP*SENDER*RECEIVER*20240102*0900*2*X*005010X221A1~"
-    "ST*835*0002~"
-    "BPR*C*1500*C*ACH*CTX*01*999999992*DA*123456789*1512345678**01*999988880*DA*987654321*20240102~"
-    "SE*3*0002~"
-    "GE*1*2~"
-    "IEA*1*000000906~"
-)
+TEST_DATA_DIR = Path(__file__).resolve().parent.parent / "test_data"
+SAMPLE_837_FILE = TEST_DATA_DIR / "sample_837.edi"
+SAMPLE_835_FILE = TEST_DATA_DIR / "sample_835.edi"
 
 
 class ParserCliTests(unittest.TestCase):
     def test_process_batch_writes_jsonl_and_metadata(self) -> None:
         with TemporaryDirectory() as tmp:
             tmp_path = Path(tmp)
-            file_837 = tmp_path / "a.edi"
-            file_835 = tmp_path / "b.edi"
             bad = tmp_path / "bad.edi"
             output = tmp_path / "records.jsonl"
             metadata_path = tmp_path / "metadata.json"
 
-            file_837.write_text(SAMPLE_837, encoding="utf-8")
-            file_835.write_text(SAMPLE_835, encoding="utf-8")
             bad.write_text("NOT_AN_EDI", encoding="utf-8")
 
-            metadata = process_edi_batch([file_837, file_835, bad], output, metadata_path)
+            metadata = process_edi_batch([SAMPLE_837_FILE, SAMPLE_835_FILE, bad], output, metadata_path)
 
             self.assertEqual(metadata["total_edi_files"], 3)
             self.assertEqual(metadata["malformed_edi_files"], 1)
@@ -63,7 +44,7 @@ class ParserCliTests(unittest.TestCase):
             tmp_path = Path(tmp)
             in_dir = tmp_path / "in"
             in_dir.mkdir()
-            (in_dir / "claim.edi").write_text(SAMPLE_837, encoding="utf-8")
+            shutil.copy(SAMPLE_837_FILE, in_dir / "claim.edi")
 
             output = tmp_path / "out.jsonl"
             metadata = tmp_path / "meta.json"
@@ -73,6 +54,32 @@ class ParserCliTests(unittest.TestCase):
             self.assertEqual(rc, 0)
             self.assertTrue(output.exists())
             self.assertTrue(metadata.exists())
+
+    def test_cli_parses_repository_test_data(self) -> None:
+        with TemporaryDirectory() as tmp:
+            tmp_path = Path(tmp)
+            output = tmp_path / "out.jsonl"
+            metadata_path = tmp_path / "meta.json"
+
+            rc = main(
+                [
+                    str(TEST_DATA_DIR),
+                    "--glob",
+                    "*.edi",
+                    "--output",
+                    str(output),
+                    "--metadata-output",
+                    str(metadata_path),
+                ]
+            )
+
+            self.assertEqual(rc, 0)
+            self.assertTrue(output.exists())
+            metadata = json.loads(metadata_path.read_text(encoding="utf-8"))
+            self.assertEqual(metadata["total_edi_files"], 2)
+            self.assertEqual(metadata["malformed_edi_files"], 0)
+            self.assertEqual(metadata["transaction_set_counts"]["835"], 1)
+            self.assertEqual(metadata["transaction_set_counts"]["837"], 1)
 
 
 if __name__ == "__main__":
