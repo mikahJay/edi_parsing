@@ -52,3 +52,32 @@ From the repository root, run:
 ```bash
 python -m edi_parsing.cli ./test_data --glob "*.edi" --output parsed_records.jsonl --metadata-output metadata.json
 ```
+
+## Snowflake Bronze/Silver/Gold setup
+
+Use the setup script at:
+
+- `/home/runner/work/edi_parsing/edi_parsing/snowflake/setup_edi_bronze_silver_gold.sql`
+
+What it creates:
+
+- Ingestion objects: JSON file format, stages, and Snowpipe `COPY INTO` pipes
+- Bronze tables: `raw_edi_segments`, `raw_edi_metadata`
+- Silver tables: `edi_segments`, `edi_segment_elements`, `edi_batch_metadata`, `edi_file_metadata`
+- Gold marts: `fact_edi_segment_counts`, `fact_transaction_counts`, `fact_error_counts`, optional `dim_date`
+- Incremental processing with `STREAM` + `TASK`
+- Secure views for downstream reads
+
+Before running in Snowflake, replace placeholders in the SQL file:
+
+- `<DATABASE_NAME>`
+- `<SCHEMA_NAME>`
+- `<WAREHOUSE_NAME>`
+- `<STAGE_URL>`
+- Optional external stage integration placeholders
+
+Run from Snowsight or SnowSQL:
+
+```sql
+!source /home/runner/work/edi_parsing/edi_parsing/snowflake/setup_edi_bronze_silver_gold.sql
+```
