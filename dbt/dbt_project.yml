@@ -1,0 +1,15 @@
+name: edi_parsing
+version: 1.0.0
+config-version: 2
+
+profile: edi_parsing
+
+model-paths: ["models"]
+
+models:
+  edi_parsing:
+    +materialized: view
+    silver:
+      +schema: silver
+    gold:
+      +schema: gold

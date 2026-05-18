@@ -1,0 +1,31 @@
+version: 2
+
+models:
+  - name: edi_segments
+    description: Typed segment-level model parsed from bronze raw_edi_segments records.
+    columns:
+      - name: raw_filename
+        tests: [not_null]
+      - name: raw_file_row_number
+        tests: [not_null]
+
+  - name: edi_segment_elements
+    description: Flattened segment element values for easier search/aggregation.
+
+  - name: edi_batch_metadata
+    description: Batch-level metadata parsed from raw metadata records.
+
+  - name: edi_file_metadata
+    description: Per-file metadata parsed from metadata files.
+
+  - name: fact_edi_segment_counts
+    description: Daily segment counts by transaction set, segment, and source file.
+
+  - name: fact_transaction_counts
+    description: Daily 835/837 transaction counts by file and interchange.
+
+  - name: fact_error_counts
+    description: Daily malformed/error trends.
+
+  - name: vw_edi_daily_transaction_counts
+    description: Secure daily transaction totals by transaction set.

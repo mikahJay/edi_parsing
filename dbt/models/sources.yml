@@ -1,0 +1,10 @@
+version: 2
+
+sources:
+  - name: bronze
+    description: Raw immutable landing tables loaded from parser outputs.
+    tables:
+      - name: raw_edi_segments
+        description: One JSON record per EDI segment line from parsed_records.jsonl.
+      - name: raw_edi_metadata
+        description: Batch-level metadata records from metadata.json files.
