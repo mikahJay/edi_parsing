@@ -150,6 +150,38 @@ class ParserCliTests(unittest.TestCase):
             )
             self.assertEqual(dtm_end_record["service_date_end"], "2024-01-08T00:00:00+00:00")
 
+    def test_process_batch_extracts_835_service_dates_from_svc_dtm_loop(self) -> None:
+        with TemporaryDirectory() as tmp:
+            tmp_path = Path(tmp)
+            edi_file = tmp_path / "service_dates_835.edi"
+            output = tmp_path / "out.jsonl"
+            metadata_path = tmp_path / "meta.json"
+
+            edi_file.write_text(
+                (
+                    "ISA*00*          *00*          *ZZ*SENDERID       *ZZ*RECEIVERID     *240105*1100*^*00501*000000909*0*T*:~"
+                    "GS*HP*SENDER*RECEIVER*20240105*1100*5*X*005010X221A1~"
+                    "ST*835*0008~"
+                    "BPR*C*1500*C*ACH*CTX*01*999999992*DA*123456789*1512345678**01*999988880*DA*987654321*20240102~"
+                    "CLP*PATIENT*1*100*80*20*MC*12345*11*1~"
+                    "SVC*HC:99213*100*80~"
+                    "DTM*232*20240103~"
+                    "SE*7*0008~"
+                    "GE*1*5~"
+                    "IEA*1*000000909~"
+                ),
+                encoding="utf-8",
+            )
+
+            metadata = process_edi_batch([edi_file], output, metadata_path)
+            self.assertEqual(metadata["service_date_range"]["earliest"], "2024-01-03T00:00:00+00:00")
+            self.assertEqual(metadata["service_date_range"]["latest"], "2024-01-03T00:00:00+00:00")
+
+            records = [json.loads(line) for line in output.read_text(encoding="utf-8").splitlines()]
+            svc_record = next(record for record in records if record["segment_id"] == "SVC")
+            self.assertEqual(svc_record["service_date_start"], "2024-01-03T00:00:00+00:00")
+            self.assertEqual(svc_record["service_date_end"], "2024-01-03T00:00:00+00:00")
+
 
 if __name__ == "__main__":
     unittest.main()

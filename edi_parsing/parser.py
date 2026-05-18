@@ -85,6 +85,21 @@ def _extract_service_dates(segment_id: str, segment_elements: list[str]) -> tupl
     return None, None
 
 
+def _extract_835_service_loop_dtm_dates(
+    current_transaction_set: str | None, segment_id: str, segment_elements: list[str]
+) -> tuple[datetime | None, datetime | None]:
+    if current_transaction_set != "835" or segment_id != "DTM" or len(segment_elements) < 2:
+        return None, None
+
+    date_value = segment_elements[1]
+    start_date, separator, end_date = date_value.partition("-")
+    if separator:
+        return _to_date_datetime(start_date), _to_date_datetime(end_date)
+
+    parsed = _to_date_datetime(date_value)
+    return parsed, parsed
+
+
 def parse_edi_file(file_path: Path) -> ParsedFileResult:
     transaction_counts = {"835": 0, "837": 0}
     records: list[dict] = []
@@ -98,6 +113,7 @@ def parse_edi_file(file_path: Path) -> ParsedFileResult:
     current_transaction_control_number: str | None = None
     current_service_date_start: datetime | None = None
     current_service_date_end: datetime | None = None
+    last_835_svc_record_index: int | None = None
 
     try:
         with file_path.open("r", encoding="utf-8") as source:
@@ -122,6 +138,10 @@ def parse_edi_file(file_path: Path) -> ParsedFileResult:
                     current_transaction_control_number = segment.get_value("SE02")
 
                 segment_service_start, segment_service_end = _extract_service_dates(segment_id, segment_elements)
+                if segment_service_start is None and segment_service_end is None:
+                    segment_service_start, segment_service_end = _extract_835_service_loop_dtm_dates(
+                        current_transaction_set, segment_id, segment_elements
+                    )
                 if segment_service_start is not None:
                     current_service_date_start = segment_service_start
                     service_datetimes.append(segment_service_start)
@@ -129,28 +149,46 @@ def parse_edi_file(file_path: Path) -> ParsedFileResult:
                     current_service_date_end = segment_service_end
                     service_datetimes.append(segment_service_end)
 
-                records.append(
-                    {
-                        "source_file": file_path.name,
-                        "segment_index": segment_index,
-                        "segment_id": segment_id,
-                        "segment_elements": segment_elements,
-                        "transaction_set": current_transaction_set,
-                        "transaction_control_number": current_transaction_control_number,
-                        "interchange_control_number": interchange_control_number,
-                        "functional_group_control_number": functional_group_control_number,
-                        "service_date_start": (
+                record = {
+                    "source_file": file_path.name,
+                    "segment_index": segment_index,
+                    "segment_id": segment_id,
+                    "segment_elements": segment_elements,
+                    "transaction_set": current_transaction_set,
+                    "transaction_control_number": current_transaction_control_number,
+                    "interchange_control_number": interchange_control_number,
+                    "functional_group_control_number": functional_group_control_number,
+                    "service_date_start": (
+                        current_service_date_start.isoformat() if current_service_date_start else None
+                    ),
+                    "service_date_end": current_service_date_end.isoformat() if current_service_date_end else None,
+                }
+                records.append(record)
+
+                if current_transaction_set == "835":
+                    if segment_id == "CLP":
+                        last_835_svc_record_index = None
+                    elif segment_id == "SVC":
+                        last_835_svc_record_index = len(records) - 1
+                    elif (
+                        segment_id == "DTM"
+                        and last_835_svc_record_index is not None
+                        and (segment_service_start is not None or segment_service_end is not None)
+                    ):
+                        svc_record = records[last_835_svc_record_index]
+                        svc_record["service_date_start"] = (
                             current_service_date_start.isoformat() if current_service_date_start else None
-                        ),
-                        "service_date_end": current_service_date_end.isoformat() if current_service_date_end else None,
-                    }
-                )
+                        )
+                        svc_record["service_date_end"] = (
+                            current_service_date_end.isoformat() if current_service_date_end else None
+                        )
 
                 if segment_id == "SE":
                     current_transaction_set = None
                     current_transaction_control_number = None
                     current_service_date_start = None
                     current_service_date_end = None
+                    last_835_svc_record_index = None
 
             errors.extend(str(error) for error in reader.pop_errors())
     except Exception as exc:  # broad exception to capture malformed files from parser
