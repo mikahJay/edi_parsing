@@ -216,3 +216,10 @@ __marimo__/
 
 # Streamlit
 .streamlit/secrets.toml
+
+# vim
+*.swp
+
+# Generated EDI parsing outputs
+metadata.json
+parsed_records.jsonl
