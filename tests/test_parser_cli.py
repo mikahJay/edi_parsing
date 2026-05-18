@@ -10,6 +10,8 @@ from edi_parsing.parser import process_edi_batch
 TEST_DATA_DIR = Path(__file__).resolve().parent.parent / "test_data"
 SAMPLE_837_FILE = TEST_DATA_DIR / "sample_837.edi"
 SAMPLE_835_FILE = TEST_DATA_DIR / "sample_835.edi"
+SAMPLE_835_MULTIPLE_2_EDIS_FILE = TEST_DATA_DIR / "sample_835_multiple_2_edis.edi"
+SAMPLE_837_MULTIPLE_3_EDIS_FILE = TEST_DATA_DIR / "sample_837_multiple_3_edis.edi"
 
 
 class ParserCliTests(unittest.TestCase):
@@ -76,10 +78,37 @@ class ParserCliTests(unittest.TestCase):
             self.assertEqual(rc, 0)
             self.assertTrue(output.exists())
             metadata = json.loads(metadata_path.read_text(encoding="utf-8"))
+            self.assertEqual(metadata["total_edi_files"], 4)
+            self.assertEqual(metadata["malformed_edi_files"], 0)
+            self.assertEqual(metadata["transaction_set_counts"]["835"], 3)
+            self.assertEqual(metadata["transaction_set_counts"]["837"], 4)
+
+    def test_process_batch_parses_multiple_edis_in_single_file(self) -> None:
+        with TemporaryDirectory() as tmp:
+            tmp_path = Path(tmp)
+            output = tmp_path / "out.jsonl"
+            metadata_path = tmp_path / "meta.json"
+
+            metadata = process_edi_batch(
+                [SAMPLE_835_MULTIPLE_2_EDIS_FILE, SAMPLE_837_MULTIPLE_3_EDIS_FILE], output, metadata_path
+            )
+
             self.assertEqual(metadata["total_edi_files"], 2)
             self.assertEqual(metadata["malformed_edi_files"], 0)
-            self.assertEqual(metadata["transaction_set_counts"]["835"], 1)
-            self.assertEqual(metadata["transaction_set_counts"]["837"], 1)
+            self.assertEqual(metadata["transaction_set_counts"]["835"], 2)
+            self.assertEqual(metadata["transaction_set_counts"]["837"], 3)
+
+            files_by_name = {
+                Path(file_metadata["file_path"]).name: file_metadata for file_metadata in metadata["files"]
+            }
+            self.assertEqual(
+                files_by_name[SAMPLE_835_MULTIPLE_2_EDIS_FILE.name]["transaction_counts"]["835"],
+                2,
+            )
+            self.assertEqual(
+                files_by_name[SAMPLE_837_MULTIPLE_3_EDIS_FILE.name]["transaction_counts"]["837"],
+                3,
+            )
 
 
 if __name__ == "__main__":
