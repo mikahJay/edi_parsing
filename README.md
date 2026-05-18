@@ -42,7 +42,10 @@ edi-parse /path/to/edis --glob "*.edi" --output parsed_records.jsonl --metadata-
 
 ## Using bundled test data
 
-The repository includes sample 835 and 837 files in `test_data/`.
+The repository includes sample 835 and 837 files in `test_data/`, including multi-EDI batch files:
+
+- `sample_835_multiple_2_edis.edi`
+- `sample_837_multiple_3_edis.edi`
 
 From the repository root, run:
 
