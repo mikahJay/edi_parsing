@@ -20,6 +20,7 @@ class ParsedFileResult:
     records: list[dict]
     transaction_counts: dict[str, int]
     creation_datetime: datetime | None
+    service_datetimes: list[datetime]
     errors: list[str]
     malformed: bool
 
@@ -39,16 +40,64 @@ def _segment_values(segment: object) -> list[str]:
     return [value for _, _, _, value in segment.values_iterator()]
 
 
+def _to_date_datetime(date_value: str | None) -> datetime | None:
+    if not date_value:
+        return None
+    for date_format in ("%Y%m%d", "%y%m%d"):
+        try:
+            return datetime.strptime(date_value, date_format).replace(tzinfo=timezone.utc)
+        except ValueError:
+            continue
+    return None
+
+
+def _extract_service_dates(segment_id: str, segment_elements: list[str]) -> tuple[datetime | None, datetime | None]:
+    if segment_id == "DTP" and len(segment_elements) >= 3:
+        qualifier = segment_elements[0]
+        date_format = segment_elements[1]
+        date_value = segment_elements[2]
+        if qualifier not in {"150", "151", "472"}:
+            return None, None
+        if date_format == "RD8":
+            start_date, separator, end_date = date_value.partition("-")
+            if not separator:
+                parsed = _to_date_datetime(start_date)
+                return parsed, parsed
+            return _to_date_datetime(start_date), _to_date_datetime(end_date)
+        parsed = _to_date_datetime(date_value)
+        if qualifier == "150":
+            return parsed, None
+        if qualifier == "151":
+            return None, parsed
+        return parsed, parsed
+
+    if segment_id == "DTM" and len(segment_elements) >= 2:
+        qualifier = segment_elements[0]
+        if qualifier not in {"150", "151", "472"}:
+            return None, None
+        parsed = _to_date_datetime(segment_elements[1])
+        if qualifier == "150":
+            return parsed, None
+        if qualifier == "151":
+            return None, parsed
+        return parsed, parsed
+
+    return None, None
+
+
 def parse_edi_file(file_path: Path) -> ParsedFileResult:
     transaction_counts = {"835": 0, "837": 0}
     records: list[dict] = []
     errors: list[str] = []
     creation_datetime: datetime | None = None
+    service_datetimes: list[datetime] = []
     interchange_control_number: str | None = None
     functional_group_control_number: str | None = None
 
     current_transaction_set: str | None = None
     current_transaction_control_number: str | None = None
+    current_service_date_start: datetime | None = None
+    current_service_date_end: datetime | None = None
 
     try:
         with file_path.open("r", encoding="utf-8") as source:
@@ -57,6 +106,7 @@ def parse_edi_file(file_path: Path) -> ParsedFileResult:
             for segment in reader:
                 segment_id = segment.get_seg_id()
                 segment_index += 1
+                segment_elements = _segment_values(segment)
 
                 if segment_id == "ISA":
                     interchange_control_number = segment.get_value("ISA13")
@@ -71,22 +121,36 @@ def parse_edi_file(file_path: Path) -> ParsedFileResult:
                 elif segment_id == "SE":
                     current_transaction_control_number = segment.get_value("SE02")
 
+                segment_service_start, segment_service_end = _extract_service_dates(segment_id, segment_elements)
+                if segment_service_start is not None:
+                    current_service_date_start = segment_service_start
+                    service_datetimes.append(segment_service_start)
+                if segment_service_end is not None:
+                    current_service_date_end = segment_service_end
+                    service_datetimes.append(segment_service_end)
+
                 records.append(
                     {
                         "source_file": file_path.name,
                         "segment_index": segment_index,
                         "segment_id": segment_id,
-                        "segment_elements": _segment_values(segment),
+                        "segment_elements": segment_elements,
                         "transaction_set": current_transaction_set,
                         "transaction_control_number": current_transaction_control_number,
                         "interchange_control_number": interchange_control_number,
                         "functional_group_control_number": functional_group_control_number,
+                        "service_date_start": (
+                            current_service_date_start.isoformat() if current_service_date_start else None
+                        ),
+                        "service_date_end": current_service_date_end.isoformat() if current_service_date_end else None,
                     }
                 )
 
                 if segment_id == "SE":
                     current_transaction_set = None
                     current_transaction_control_number = None
+                    current_service_date_start = None
+                    current_service_date_end = None
 
             errors.extend(str(error) for error in reader.pop_errors())
     except Exception as exc:  # broad exception to capture malformed files from parser
@@ -96,6 +160,7 @@ def parse_edi_file(file_path: Path) -> ParsedFileResult:
             records=[],
             transaction_counts=transaction_counts,
             creation_datetime=None,
+            service_datetimes=[],
             errors=errors,
             malformed=True,
         )
@@ -108,6 +173,7 @@ def parse_edi_file(file_path: Path) -> ParsedFileResult:
         records=records,
         transaction_counts=transaction_counts,
         creation_datetime=creation_datetime,
+        service_datetimes=service_datetimes,
         errors=errors,
         malformed=False,
     )
@@ -127,6 +193,7 @@ def process_edi_batch(input_files: Iterable[Path], output_file: Path, metadata_f
                 sink.write("\n")
 
     creation_datetimes = [result.creation_datetime for result in results if result.creation_datetime is not None]
+    service_datetimes = [service_date for result in results for service_date in result.service_datetimes]
 
     metadata = {
         "generated_at_utc": datetime.now(timezone.utc).isoformat(),
@@ -140,6 +207,10 @@ def process_edi_batch(input_files: Iterable[Path], output_file: Path, metadata_f
         "creation_date_range": {
             "earliest": min(creation_datetimes).isoformat() if creation_datetimes else None,
             "latest": max(creation_datetimes).isoformat() if creation_datetimes else None,
+        },
+        "service_date_range": {
+            "earliest": min(service_datetimes).isoformat() if service_datetimes else None,
+            "latest": max(service_datetimes).isoformat() if service_datetimes else None,
         },
         "files": [
             {

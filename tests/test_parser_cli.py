@@ -110,6 +110,46 @@ class ParserCliTests(unittest.TestCase):
                 3,
             )
 
+    def test_process_batch_extracts_service_date_ranges(self) -> None:
+        with TemporaryDirectory() as tmp:
+            tmp_path = Path(tmp)
+            edi_file = tmp_path / "service_dates.edi"
+            output = tmp_path / "out.jsonl"
+            metadata_path = tmp_path / "meta.json"
+
+            edi_file.write_text(
+                (
+                    "ISA*00*          *00*          *ZZ*SENDERID       *ZZ*RECEIVERID     *240105*1100*^*00501*000000909*0*T*:~"
+                    "GS*HC*SENDER*RECEIVER*20240105*1100*5*X*005010X222A1~"
+                    "ST*837*0008~"
+                    "BHT*0019*00*0123*20240105*1110*CH~"
+                    "DTP*472*RD8*20240103-20240107~"
+                    "DTM*150*20240102~"
+                    "DTM*151*20240108~"
+                    "SE*7*0008~"
+                    "GE*1*5~"
+                    "IEA*1*000000909~"
+                ),
+                encoding="utf-8",
+            )
+
+            metadata = process_edi_batch([edi_file], output, metadata_path)
+
+            self.assertEqual(metadata["service_date_range"]["earliest"], "2024-01-02T00:00:00+00:00")
+            self.assertEqual(metadata["service_date_range"]["latest"], "2024-01-08T00:00:00+00:00")
+
+            records = [json.loads(line) for line in output.read_text(encoding="utf-8").splitlines()]
+            dtp_record = next(record for record in records if record["segment_id"] == "DTP")
+            self.assertEqual(dtp_record["service_date_start"], "2024-01-03T00:00:00+00:00")
+            self.assertEqual(dtp_record["service_date_end"], "2024-01-07T00:00:00+00:00")
+
+            dtm_end_record = next(
+                record
+                for record in records
+                if record["segment_id"] == "DTM" and record["segment_elements"][0] == "151"
+            )
+            self.assertEqual(dtm_end_record["service_date_end"], "2024-01-08T00:00:00+00:00")
+
 
 if __name__ == "__main__":
     unittest.main()
