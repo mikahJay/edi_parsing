@@ -81,3 +81,19 @@ Run from Snowsight or SnowSQL:
 ```sql
 !source snowflake/setup_edi_bronze_silver_gold.sql
 ```
+
+## dbt models (Silver/Gold)
+
+A first-pass dbt reconstruction of the Snowflake transformation SQL is available under:
+
+- `/home/runner/work/edi_parsing/edi_parsing/dbt`
+
+Included models:
+
+- Silver: `edi_segments`, `edi_segment_elements`, `edi_batch_metadata`, `edi_file_metadata`
+- Gold: `fact_edi_segment_counts`, `fact_transaction_counts`, `fact_error_counts`, `vw_edi_daily_transaction_counts`
+
+The dbt models expect Bronze source tables named:
+
+- `raw_edi_segments`
+- `raw_edi_metadata`
