@@ -31,14 +31,20 @@ python -m unittest discover -s tests -v
 ## CLI
 
 ```bash
-python -m edi_parsing.cli /path/to/edis --glob "*.edi" --output parsed_records.jsonl --metadata-output metadata.json
+python -m edi_parsing.cli /path/to/edis --glob "*.edi" --output parsed_records.jsonl --metadata-output metadata.json --metadata-csv-output metadata_summary.csv
 ```
 
 Or, after installation:
 
 ```bash
-edi-parse /path/to/edis --glob "*.edi" --output parsed_records.jsonl --metadata-output metadata.json
+edi-parse /path/to/edis --glob "*.edi" --output parsed_records.jsonl --metadata-output metadata.json --metadata-csv-output metadata_summary.csv
 ```
+
+`--metadata-csv-output` writes a CSV summary with:
+
+- `total_files`: total number of input files processed
+- `date`: ISA creation date (`YYYY-MM-DD`)
+- `edi_count`: total 835+837 transaction sets for that date
 
 ## Using bundled test data
 

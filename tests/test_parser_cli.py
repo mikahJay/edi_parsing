@@ -1,6 +1,8 @@
 import json
 import shutil
 import unittest
+from collections import defaultdict
+import csv
 from pathlib import Path
 from tempfile import TemporaryDirectory
 
@@ -149,6 +151,50 @@ class ParserCliTests(unittest.TestCase):
                 if record["segment_id"] == "DTM" and record["segment_elements"][0] == "151"
             )
             self.assertEqual(dtm_end_record["service_date_end"], "2024-01-08T00:00:00+00:00")
+
+    def test_cli_writes_metadata_csv_summary(self) -> None:
+        with TemporaryDirectory() as tmp:
+            tmp_path = Path(tmp)
+            output = tmp_path / "out.jsonl"
+            metadata_path = tmp_path / "meta.json"
+            metadata_csv_path = tmp_path / "meta.csv"
+
+            rc = main(
+                [
+                    str(TEST_DATA_DIR),
+                    "--glob",
+                    "*.edi",
+                    "--output",
+                    str(output),
+                    "--metadata-output",
+                    str(metadata_path),
+                    "--metadata-csv-output",
+                    str(metadata_csv_path),
+                ]
+            )
+
+            self.assertEqual(rc, 0)
+            self.assertTrue(metadata_csv_path.exists())
+
+            metadata = json.loads(metadata_path.read_text(encoding="utf-8"))
+            expected_counts = defaultdict(int)
+            for file_metadata in metadata["files"]:
+                creation_datetime = file_metadata["creation_datetime"]
+                if not creation_datetime:
+                    continue
+                creation_date = creation_datetime.split("T", 1)[0]
+                transaction_counts = file_metadata["transaction_counts"]
+                expected_counts[creation_date] += transaction_counts["835"] + transaction_counts["837"]
+
+            with metadata_csv_path.open("r", encoding="utf-8", newline="") as source:
+                rows = list(csv.DictReader(source))
+
+            self.assertTrue(rows)
+            self.assertEqual(set(rows[0].keys()), {"total_files", "date", "edi_count"})
+            self.assertTrue(all(int(row["total_files"]) == metadata["total_edi_files"] for row in rows))
+
+            actual_counts = {row["date"]: int(row["edi_count"]) for row in rows if row["date"]}
+            self.assertEqual(actual_counts, dict(expected_counts))
 
 
 if __name__ == "__main__":
